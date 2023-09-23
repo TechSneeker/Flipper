@@ -1,15 +1,21 @@
 package br.com.techsneeker.object;
 
+import me.nullicorn.nedit.NBTReader;
+import me.nullicorn.nedit.type.NBTCompound;
+import me.nullicorn.nedit.type.NBTList;
+
+import java.io.IOException;
+
 public class Item {
 
     private String id;
     private String name;
     private String description;
-    private String itemBytes;
+
     private String rarity;
     private long value;
     private long lastUpdate;
-    private boolean claimed;
+    private NBTCompound extraAttributes;
 
     public String getId() {
         return id;
@@ -33,14 +39,6 @@ public class Item {
 
     public void setDescription(String description) {
         this.description = description;
-    }
-
-    public String getItemBytes() {
-        return itemBytes;
-    }
-
-    public void setItemBytes(String itemBytes) {
-        this.itemBytes = itemBytes;
     }
 
     public String getRarity() {
@@ -67,12 +65,28 @@ public class Item {
         this.lastUpdate = lastUpdate;
     }
 
-    public boolean isClaimed() {
-        return claimed;
+    public NBTCompound getExtraAttributes() {
+        return extraAttributes;
     }
 
-    public void setClaimed(boolean claimed) {
-        this.claimed = claimed;
+    public void setExtraAttributes(String itemBytes) {
+        NBTCompound result = null;
+        try {
+            result = NBTReader.readBase64(itemBytes);
+            NBTList list = (NBTList) result.get("i");
+
+            this.extraAttributes = (NBTCompound) ((NBTCompound) list.get(0))
+                    .getCompound("tag").get("ExtraAttributes");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
+    public boolean isPet() {
+        try {
+            return ((String) extraAttributes.get("id")).equalsIgnoreCase("pet");
+        } catch (NullPointerException e) {
+            return false;
+        }
+    }
 }

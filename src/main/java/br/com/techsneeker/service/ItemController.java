@@ -1,51 +1,43 @@
 package br.com.techsneeker.service;
 
 import br.com.techsneeker.Utils;
+import br.com.techsneeker.object.Item;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import me.nullicorn.nedit.NBTReader;
 import me.nullicorn.nedit.type.NBTCompound;
-import me.nullicorn.nedit.type.NBTList;
 import org.apache.commons.lang3.StringUtils;
-
-import java.io.IOException;
 
 public class ItemController {
 
-    private final String itemBytes;
+    private final Item item;
 
-    public ItemController(String itemBytes) {
-        this.itemBytes = itemBytes;
+    public ItemController(Item item) {
+        this.item = item;
     }
 
-    public String getFormattedNameId() throws IOException {
-        NBTCompound result = NBTReader.readBase64(itemBytes);
+    public String getFormattedNameId() {
+        NBTCompound extraAttributes = item.getExtraAttributes();
 
-        NBTList list = (NBTList) result.get("i");
-        NBTCompound extraAttributes = (NBTCompound) ((NBTCompound)
-                list.get(0)).getCompound("tag").get("ExtraAttributes");
-
-        String id = (String) extraAttributes.get("id");
-
-        if (StringUtils.equalsIgnoreCase(id, "pet")) {
-
-            String jsonString = extraAttributes.getString("petInfo");
-            JsonObject petInfo = JsonParser.parseString(jsonString).getAsJsonObject();
-
-            String petTier = petInfo.get("tier").getAsString();
-            String petType = petInfo.get("type").getAsString();
-
-            if (StringUtils.containsWhitespace(petType)) {
-                petType = petType.replace(" ", "_");
-            }
-
-            Integer numbering = Utils.numberByTier(petTier);
-
-            return String.format("%s;%d", petType, numbering);
-
+        if (item.isPet()) {
+           return buildFormattedPetName(extraAttributes);
         }
 
-        return id;
+        return (String) extraAttributes.get("id");
+    }
+
+    private String buildFormattedPetName(NBTCompound extraAttributes) {
+        String jsonString = extraAttributes.getString("petInfo");
+        JsonObject petInfo = JsonParser.parseString(jsonString).getAsJsonObject();
+
+        String petTier = petInfo.get("tier").getAsString();
+        String petType = petInfo.get("type").getAsString();
+
+        if (StringUtils.containsWhitespace(petType)) {
+            petType = petType.replace(" ", "_");
+        }
+
+        Integer numbering = Utils.numberByTier(petTier);
+        return String.format("%s;%d", petType, numbering);
     }
 
 }

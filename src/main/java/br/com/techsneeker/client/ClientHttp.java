@@ -10,7 +10,7 @@ import java.net.http.HttpResponse;
 
 public class ClientHttp {
 
-    private final HttpClient CLIENT = HttpClient.newBuilder().build();;
+    private final HttpClient CLIENT = HttpClient.newBuilder().build();
 
     public String getAuction() {
         HttpRequest request = HttpRequest.newBuilder()

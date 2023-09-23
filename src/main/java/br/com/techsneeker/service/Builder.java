@@ -7,6 +7,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public class Builder {
 
     private final String jsonValue;
@@ -15,17 +18,17 @@ public class Builder {
         this.jsonValue = response;
     }
 
-    public Item[] buildItems(int amountItems) {
+    public Item[] buildItems(int maxAmountItems) {
         JsonElement jsonElement = JsonParser.parseString(jsonValue);
         JsonObject jsonObject = jsonElement.getAsJsonObject();
         JsonArray jsonArray = jsonObject.getAsJsonArray("auctions");
 
-        Item[] itemsArray = new Item[amountItems];
+        Item[] itemsArray = new Item[maxAmountItems];
         int amountBuilt = 0;
 
         for (JsonElement itemElement : jsonArray) {
 
-            if (amountBuilt == amountItems) {
+            if (amountBuilt == maxAmountItems) {
                 break;
             }
 
@@ -37,7 +40,8 @@ public class Builder {
             amountBuilt++;
         }
 
-        return itemsArray;
+        return Arrays.stream(itemsArray)
+                .filter(Objects::nonNull).toArray(Item[]::new);
     }
 
     private Item getItemFromElement(JsonElement itemElement) {
@@ -53,7 +57,7 @@ public class Builder {
         item.setId(jsonItem.get("uuid").getAsString());
         item.setName(jsonItem.get("item_name").getAsString());
         item.setDescription(jsonItem.get("extra").getAsString());
-        item.setItemBytes(jsonItem.get("item_bytes").getAsString());
+        item.setExtraAttributes(jsonItem.get("item_bytes").getAsString());
         item.setRarity(jsonItem.get("tier").getAsString());
         item.setValue(jsonItem.get("starting_bid").getAsLong());
         item.setLastUpdate(jsonItem.get("last_updated").getAsLong());
