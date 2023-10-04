@@ -1,6 +1,5 @@
 package br.com.techsneeker.service;
 
-import br.com.techsneeker.Utils;
 import br.com.techsneeker.object.Item;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;

@@ -1,7 +1,8 @@
 package br.com.techsneeker.service;
 
+import br.com.techsneeker.object.Filter;
 import br.com.techsneeker.object.Item;
-import br.com.techsneeker.object.enums.DeletedItem;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -9,6 +10,7 @@ import com.google.gson.JsonParser;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Builder {
 
@@ -24,20 +26,22 @@ public class Builder {
         JsonArray jsonArray = jsonObject.getAsJsonArray("auctions");
 
         Item[] itemsArray = new Item[maxAmountItems];
-        int amountBuilt = 0;
+        AtomicInteger amountBuilt = new AtomicInteger(0);
 
         for (JsonElement itemElement : jsonArray) {
 
-            if (amountBuilt == maxAmountItems) {
+            if (amountBuilt.get() == maxAmountItems) {
                 break;
             }
 
             Item item = getItemFromElement(itemElement);
 
-            if (item == null) continue;
+            if (item == null) {
+                continue;
+            }
 
-            itemsArray[amountBuilt] = item;
-            amountBuilt++;
+            itemsArray[amountBuilt.get()] = item;
+            amountBuilt.incrementAndGet();
         }
 
         return Arrays.stream(itemsArray)
@@ -47,18 +51,22 @@ public class Builder {
     private Item getItemFromElement(JsonElement itemElement) {
         JsonObject jsonItem = itemElement.getAsJsonObject();
 
+        String category = jsonItem.get("category").getAsString();
+        String itemName = jsonItem.get("item_name").getAsString();
+
+        if (Filter.isIgnorable(category, itemName)) {
+            return null;
+        }
+
         boolean bin = jsonItem.get("bin").getAsBoolean();
         boolean claimed = jsonItem.get("claimed").getAsBoolean();
-        boolean deletedItem = DeletedItem.isExist(jsonItem.get("item_name").getAsString());
 
-        if (deletedItem || claimed || !bin) return null;
+        if (!bin || claimed) return null;
 
         Item item = new Item();
+        item.setName(itemName);
         item.setId(jsonItem.get("uuid").getAsString());
-        item.setName(jsonItem.get("item_name").getAsString());
-        item.setDescription(jsonItem.get("extra").getAsString());
         item.setExtraAttributes(jsonItem.get("item_bytes").getAsString());
-        item.setRarity(jsonItem.get("tier").getAsString());
         item.setValue(jsonItem.get("starting_bid").getAsLong());
         item.setLastUpdate(jsonItem.get("last_updated").getAsLong());
 

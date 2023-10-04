@@ -1,8 +1,13 @@
-package br.com.techsneeker;
+package br.com.techsneeker.service;
 
 import br.com.techsneeker.object.enums.Reforge;
 
+import java.awt.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
+
 public class Utils {
+
 
     public static String[] reforgesByCategory(String category) {
 
@@ -28,6 +33,13 @@ public class Utils {
         }
 
         return null;
+    }
+
+    public static void sendToClipboard(String text) {
+        StringSelection selection = new StringSelection(text);
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+        clipboard.setContents(selection, null);
+        Toolkit.getDefaultToolkit().beep();
     }
 
 }

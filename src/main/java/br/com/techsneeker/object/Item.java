@@ -11,7 +11,6 @@ public class Item {
     private String id;
     private String name;
     private String description;
-
     private String rarity;
     private long value;
     private long lastUpdate;

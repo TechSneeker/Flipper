@@ -7,7 +7,7 @@ import java.util.List;
 public class DeletedItem {
 
     private static final List<String> ITEM_KEY_WORD = List.of(
-            "rune"
+            "rune", "skin", "cake"
     );
 
     public static boolean isExist(String mainName) {
