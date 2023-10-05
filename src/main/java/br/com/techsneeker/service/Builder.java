@@ -8,9 +8,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Builder {
 
@@ -25,27 +24,23 @@ public class Builder {
         JsonObject jsonObject = jsonElement.getAsJsonObject();
         JsonArray jsonArray = jsonObject.getAsJsonArray("auctions");
 
-        Item[] itemsArray = new Item[maxAmountItems];
-        AtomicInteger amountBuilt = new AtomicInteger(0);
+        List<Item> items = new ArrayList<>();
 
         for (JsonElement itemElement : jsonArray) {
 
-            if (amountBuilt.get() == maxAmountItems) {
+            if (items.size() >= maxAmountItems) {
                 break;
             }
 
             Item item = getItemFromElement(itemElement);
 
-            if (item == null) {
-                continue;
+            if (item != null) {
+                items.add(item);
             }
 
-            itemsArray[amountBuilt.get()] = item;
-            amountBuilt.incrementAndGet();
         }
 
-        return Arrays.stream(itemsArray)
-                .filter(Objects::nonNull).toArray(Item[]::new);
+        return items.toArray(new Item[0]);
     }
 
     private Item getItemFromElement(JsonElement itemElement) {

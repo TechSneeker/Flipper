@@ -42,6 +42,9 @@ public class Scanner {
     }
 
     private void searchProfitableItems() {
+
+        long start = System.nanoTime();
+
         count.incrementAndGet();
         System.out.println("Searching... " + count.get() + "x");
         String auction = CLIENT.getAuction();
@@ -57,11 +60,10 @@ public class Scanner {
             boolean isCached = idCached.contains(item.getId());
             if (isCached) continue;
 
-            ItemController controller = new ItemController(item);
-            String formattedName = controller.getFormattedNameId();
+            String formattedName = ItemController.getFormattedNameId(item);
 
             if (lowestBinJson.get(formattedName) == null) {
-                return;
+                continue;
             }
 
             long lowestBin = lowestBinJson.get(formattedName).getAsLong();
@@ -78,10 +80,15 @@ public class Scanner {
 
         }
 
+        long end = System.nanoTime();
+        long elapsedTimeMillis = TimeUnit.NANOSECONDS.toMillis(end - start);
+        System.out.println("Time: " + elapsedTimeMillis + "ms");
+
         if (profitableItem.getId() == null) return;
 
         Utils.sendToClipboard("/viewauction " + profitableItem.getId());
-        System.out.println(profitableItem.getName() + " - " + profitableItem.getValue() + "    Profit: " +  profitableValue + "/viewauction " + profitableItem.getId());
+        System.out.println(profitableItem.getName() + " - " + profitableItem.getValue()
+                + "    Profit: " +  profitableValue + "/viewauction " + profitableItem.getId());
     }
 
     private void updateLowestBin() {

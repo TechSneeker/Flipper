@@ -8,13 +8,7 @@ import org.apache.commons.lang3.StringUtils;
 
 public class ItemController {
 
-    private final Item item;
-
-    public ItemController(Item item) {
-        this.item = item;
-    }
-
-    public String getFormattedNameId() {
+    public static String getFormattedNameId(Item item) {
         NBTCompound extraAttributes = item.getExtraAttributes();
 
         if (item.isPet()) {
@@ -24,7 +18,7 @@ public class ItemController {
         return (String) extraAttributes.get("id");
     }
 
-    private String buildFormattedPetName(NBTCompound extraAttributes) {
+    private static String buildFormattedPetName(NBTCompound extraAttributes) {
         String jsonString = extraAttributes.getString("petInfo");
         JsonObject petInfo = JsonParser.parseString(jsonString).getAsJsonObject();
 
