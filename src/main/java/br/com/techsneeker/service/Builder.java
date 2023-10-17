@@ -13,13 +13,7 @@ import java.util.List;
 
 public class Builder {
 
-    private final String jsonValue;
-
-    public Builder(String response) {
-        this.jsonValue = response;
-    }
-
-    public Item[] buildItems(int maxAmountItems) {
+    public static List<Item> buildItems(String jsonValue, int maxAmountItems) {
         JsonElement jsonElement = JsonParser.parseString(jsonValue);
         JsonObject jsonObject = jsonElement.getAsJsonObject();
         JsonArray jsonArray = jsonObject.getAsJsonArray("auctions");
@@ -40,10 +34,10 @@ public class Builder {
 
         }
 
-        return items.toArray(new Item[0]);
+        return items;
     }
 
-    private Item getItemFromElement(JsonElement itemElement) {
+    private static Item getItemFromElement(JsonElement itemElement) {
         JsonObject jsonItem = itemElement.getAsJsonObject();
 
         String category = jsonItem.get("category").getAsString();

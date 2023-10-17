@@ -1,10 +1,12 @@
 package br.com.techsneeker.object;
 
+import br.com.techsneeker.service.Utils;
 import me.nullicorn.nedit.NBTReader;
 import me.nullicorn.nedit.type.NBTCompound;
 import me.nullicorn.nedit.type.NBTList;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 public class Item {
 
@@ -12,9 +14,18 @@ public class Item {
     private String name;
     private String description;
     private String rarity;
-    private long value;
-    private long lastUpdate;
+    private LocalDateTime lastUpdate;
     private NBTCompound extraAttributes;
+    private long value;
+    private long profit;
+
+    public long getProfit() {
+        return profit;
+    }
+
+    public void setProfit(long profit) {
+        this.profit = profit;
+    }
 
     public String getId() {
         return id;
@@ -56,12 +67,12 @@ public class Item {
         this.value = value;
     }
 
-    public long getLastUpdate() {
+    public LocalDateTime getLastUpdate() {
         return lastUpdate;
     }
 
     public void setLastUpdate(long lastUpdate) {
-        this.lastUpdate = lastUpdate;
+        this.lastUpdate = Utils.epochMilliToDate(lastUpdate);
     }
 
     public NBTCompound getExtraAttributes() {

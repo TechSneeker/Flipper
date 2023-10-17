@@ -5,6 +5,9 @@ import br.com.techsneeker.object.enums.Reforge;
 import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 public class Utils {
 
@@ -40,6 +43,11 @@ public class Utils {
         Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
         clipboard.setContents(selection, null);
         Toolkit.getDefaultToolkit().beep();
+    }
+
+    public static LocalDateTime epochMilliToDate(long value) {
+        Instant instant = Instant.ofEpochMilli(value);
+        return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
     }
 
 }
