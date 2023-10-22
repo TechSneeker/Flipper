@@ -1,11 +1,11 @@
 package br.com.techsneeker.scanner;
 
-import br.com.techsneeker.client.ClientHttp;
 import br.com.techsneeker.object.Filter;
 import br.com.techsneeker.object.Item;
 import br.com.techsneeker.service.ItemController;
 import br.com.techsneeker.service.ProfitCalculator;
 import br.com.techsneeker.service.Utils;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -13,35 +13,26 @@ import com.google.gson.JsonParser;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
+
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class OnCooldownScanner extends ScannerContract {
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-    private final Set<String> idsCached = new HashSet<>();
-
-    private int amountItemsPerSearch = 100;
-    private Long maximumPrice = 250000L;
-    private Long minimumProfit = 250000L;
-
     public OnCooldownScanner() {
-        this.client = new ClientHttp();
+        scheduler = Executors.newScheduledThreadPool(3);
         this.lbUpdater();
     }
 
-    public OnCooldownScanner(Long maximumPrice, Long minimumProfit) {
+    public OnCooldownScanner(long maximumPrice, long minimumProfit) {
+        scheduler = Executors.newScheduledThreadPool(3);
         this.maximumPrice = maximumPrice;
         this.minimumProfit = minimumProfit;
-        this.client = new ClientHttp();
         this.lbUpdater();
     }
 
     public OnCooldownScanner configAmount(int amount) {
-        this.amountItemsPerSearch = amount;
+        super.amountItemsPerSearch = amount;
         return this;
     }
 
@@ -61,10 +52,11 @@ public class OnCooldownScanner extends ScannerContract {
 
     @Override
     protected void pooling() {
-        this.buildItems(client.getAuction(), amountItemsPerSearch);
+        this.builder(client.getAuction(), amountItemsPerSearch);
     }
 
-    private void buildItems(String jsonValue, int maxIterations) {
+    @Override
+    protected void builder(String jsonValue, int maxIterations) {
         long start = System.nanoTime();
 
         Item profitableItem = null;
@@ -76,30 +68,19 @@ public class OnCooldownScanner extends ScannerContract {
 
         int i = 0;
         for (JsonElement itemElement : jsonArray) {
-
             if (i >= maxIterations) {
                 break;
             }
 
             i++;
 
-            Item item = getItemFromElement(itemElement);
+            Item item = this.filter(itemElement);
 
             if (item == null) {
                 continue;
             }
 
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime auctionTime = item.getLastUpdate();
-
-            Duration duration = Duration.between(auctionTime, now);
-            long seconds = duration.getSeconds();
-
-            if (!(seconds < 20)) {
-                continue;
-            }
-
-            if (!idsCached.contains(item.getId())) {
+            if (!idCached.contains(item.getId())) {
                 String formattedName = ItemController.getFormattedNameId(item);
                 JsonElement lowestBinElement = lbJson.get(formattedName);
 
@@ -128,7 +109,8 @@ public class OnCooldownScanner extends ScannerContract {
         }
     }
 
-    private Item getItemFromElement(JsonElement itemElement) {
+    @Override
+    protected Item filter(JsonElement itemElement) {
         JsonObject jsonItem = itemElement.getAsJsonObject();
 
         String category = jsonItem.get("category").getAsString();
@@ -138,23 +120,36 @@ public class OnCooldownScanner extends ScannerContract {
             return null;
         }
 
+        long lastUpdated = jsonItem.get("last_updated").getAsLong();
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime auctionTime = Utils.epochMilliToDate(lastUpdated);
+
+        Duration duration = Duration.between(auctionTime, now);
+
+        if (!(duration.getSeconds() <= 20)) {
+            return null;
+        }
+
         boolean bin = jsonItem.get("bin").getAsBoolean();
         boolean claimed = jsonItem.get("claimed").getAsBoolean();
 
-        if (!bin || claimed) return null;
+        if (!bin || claimed) {
+            return null;
+        }
 
         Item item = new Item();
         item.setName(itemName);
+        item.setLastUpdate(lastUpdated);
         item.setId(jsonItem.get("uuid").getAsString());
         item.setExtraAttributes(jsonItem.get("item_bytes").getAsString());
         item.setValue(jsonItem.get("starting_bid").getAsLong());
-        item.setLastUpdate(jsonItem.get("last_updated").getAsLong());
 
         return item;
     }
 
-    private void addToCache(String value) {
-        this.idsCached.add(value);
+    private void addToCache(String id) {
+        idCached.add(id);
     }
 
 }

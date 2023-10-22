@@ -4,7 +4,6 @@ import br.com.techsneeker.object.Config;
 import br.com.techsneeker.scanner.CommonScanner;
 import br.com.techsneeker.scanner.OnCooldownScanner;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class Main {
@@ -13,11 +12,12 @@ public class Main {
         Map<String, Object> userPreferences = Config.collectPreferences();
 
         String scanner = (String) userPreferences.get("scanner");
-        Long maximumPrice = (Long) userPreferences.get("minimumPrice");
-        Long minimumProfit = (Long) userPreferences.get("minimumProfit");
+        long maximumPrice = (long) userPreferences.get("maximumPrice");
+        long minimumProfit = (long) userPreferences.get("minimumProfit");
 
         if (scanner.equals("common")) {
-            CommonScanner commonScanner = new CommonScanner(maximumPrice, minimumProfit);
+            CommonScanner cScanner = new CommonScanner(maximumPrice, minimumProfit);
+            cScanner.configAmount(1000).start();
         }
 
         if (scanner.equals("cooldown")) {

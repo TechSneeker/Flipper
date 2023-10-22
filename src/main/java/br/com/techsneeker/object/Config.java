@@ -19,10 +19,10 @@ public class Config {
 
     private static void collectMinPrices() {
         System.out.print("Maximum item price:");
-        Long itemPrice = scanner.nextLong();
+        long itemPrice = scanner.nextLong();
 
         System.out.print("Minimum item profit:");
-        Long itemProfit = scanner.nextLong();
+        long itemProfit = scanner.nextLong();
 
         clearConsole();
 

@@ -1,6 +1,5 @@
 package br.com.techsneeker.scanner;
 
-import br.com.techsneeker.client.ClientHttp;
 import br.com.techsneeker.object.Filter;
 import br.com.techsneeker.object.Item;
 import br.com.techsneeker.service.ItemController;
@@ -11,51 +10,54 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class CommonScanner {
-
-    private final ClientHttp client = new ClientHttp();
-    private final Set<String> idCache = new HashSet<>();
-
-    private JsonObject lowestBinJson;
-    private Long maximumPrice = 250000L;
-    private Long minimumProfit = 250000L;
+public class CommonScanner extends ScannerContract {
 
     public CommonScanner() {
-        this.configThreads();
+        this.scheduler = Executors.newScheduledThreadPool(3);
+        this.lbUpdater();
     }
 
-    public CommonScanner(Long maximumPrice, Long minimumProfit) {
+    public CommonScanner(long maximumPrice, long minimumProfit) {
+        this.scheduler = Executors.newScheduledThreadPool(3);
         this.maximumPrice = maximumPrice;
         this.minimumProfit = minimumProfit;
-        this.configThreads();
+        this.lbUpdater();
     }
 
-    private void configThreads() {
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-        scheduler.scheduleAtFixedRate(this::updateLowestBin, 0, 5, TimeUnit.SECONDS);
-        scheduler.scheduleAtFixedRate(this::searchProfitableItems, 1, 1, TimeUnit.SECONDS);
+    public CommonScanner configAmount(int amount) {
+        this.amountItemsPerSearch = amount;
+        return this;
     }
 
-    private void searchProfitableItems() {
-        buildItems(client.getAuction(), 100);
+    @Override
+    public void start() {
+        lbSearching = scheduler.scheduleAtFixedRate(this::lbUpdater, 0, 5, TimeUnit.SECONDS);
+        ahSearching = scheduler.scheduleAtFixedRate(this::pooling, 1, 2, TimeUnit.SECONDS);
     }
 
-    private void updateLowestBin() {
-        String jsonValue = client.getLowestBin();
-        this.lowestBinJson = JsonParser.parseString(jsonValue).getAsJsonObject();
+    @Override
+    public void stop() {
+        if (lbSearching != null && ahSearching != null) {
+            lbSearching.cancel(false);
+            ahSearching.cancel(false);
+        }
     }
 
-    private void buildItems(String jsonValue, int maxIterations) {
+    @Override
+    protected void pooling() {
+        this.builder(client.getAuction(), amountItemsPerSearch);
+    }
+
+    @Override
+    protected void builder(String jsonValue, int maxIterations) {
         long start = System.nanoTime();
 
-        Item profitableItem = null;
-        long profitableValue = 0L;
+        List<Item> profitableItems = new ArrayList<>();
 
         JsonElement jsonElement = JsonParser.parseString(jsonValue);
         JsonObject jsonObject = jsonElement.getAsJsonObject();
@@ -66,13 +68,18 @@ public class CommonScanner {
             if (i >= maxIterations) {
                 break;
             }
+
             i++;
 
-            Item item = getItemFromElement(itemElement);
+            Item item = this.filter(itemElement);
 
-            if (item != null && !idCache.contains(item.getId())) {
+            if (item == null) {
+                continue;
+            }
+
+            if (!idCached.contains(item.getId())) {
                 String formattedName = ItemController.getFormattedNameId(item);
-                JsonElement lowestBinElement = lowestBinJson.get(formattedName);
+                JsonElement lowestBinElement = lbJson.get(formattedName);
 
                 if (lowestBinElement != null) {
                     long lowestBin = lowestBinElement.getAsLong();
@@ -80,9 +87,8 @@ public class CommonScanner {
                     long profit = ProfitCalculator.getProfit(itemPrice, lowestBin);
 
                     if (profit >= minimumProfit && itemPrice <= maximumPrice) {
-                        profitableValue = profit;
-                        profitableItem = item;
-                        break;
+                        item.setProfit(profit);
+                        profitableItems.add(item);
                     }
                 }
             }
@@ -92,14 +98,29 @@ public class CommonScanner {
         long elapsedTimeMillis = TimeUnit.NANOSECONDS.toMillis(end - start);
         System.out.println("Time: " + elapsedTimeMillis + "ms");
 
-        if (profitableItem != null) {
-            addToCache(profitableItem.getId());
-            Utils.sendToClipboard("/viewauction " + profitableItem.getId());
-            System.out.println(profitableItem.getName() + " - " + profitableItem.getValue() + "    Profit: " + profitableValue + "/viewauction " + profitableItem.getId());
+        if (!profitableItems.isEmpty()) {
+
+            Item mostProfitableItem = null;
+            long profitableValue = 1L;
+
+            for (Item item : profitableItems) {
+                addToCache(item.getId());
+
+                if (item.getProfit() > profitableValue) {
+                    mostProfitableItem = item;
+                    profitableValue = item.getProfit();
+                }
+
+                System.out.println(item.getName() + " - " + item.getValue() + "    Profit: " + item.getProfit() + " /viewauction " + item.getId());
+            }
+
+            Utils.sendToClipboard("/viewauction " + mostProfitableItem.getId());
         }
     }
 
-    private Item getItemFromElement(JsonElement itemElement) {
+
+    @Override
+    protected Item filter(JsonElement itemElement) {
         JsonObject jsonItem = itemElement.getAsJsonObject();
 
         String category = jsonItem.get("category").getAsString();
@@ -112,7 +133,9 @@ public class CommonScanner {
         boolean bin = jsonItem.get("bin").getAsBoolean();
         boolean claimed = jsonItem.get("claimed").getAsBoolean();
 
-        if (!bin || claimed) return null;
+        if (!bin || claimed) {
+            return null;
+        }
 
         Item item = new Item();
         item.setName(itemName);
@@ -125,7 +148,7 @@ public class CommonScanner {
     }
 
     public void addToCache(String id) {
-        idCache.add(id);
+        idCached.add(id);
     }
 
 }
