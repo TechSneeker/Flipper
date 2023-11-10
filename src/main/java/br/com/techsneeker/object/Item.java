@@ -1,23 +1,18 @@
 package br.com.techsneeker.object;
 
-import br.com.techsneeker.service.Utils;
 import me.nullicorn.nedit.NBTReader;
 import me.nullicorn.nedit.type.NBTCompound;
 import me.nullicorn.nedit.type.NBTList;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 
 public class Item {
 
     private String id;
     private String name;
-    private String description;
-    private String rarity;
-    private LocalDateTime lastUpdate;
-    private NBTCompound extraAttributes;
     private long value;
     private long profit;
+    private NBTCompound extraAttributes;
 
     public long getProfit() {
         return profit;
@@ -43,22 +38,6 @@ public class Item {
         this.name = name;
     }
 
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public String getRarity() {
-        return rarity;
-    }
-
-    public void setRarity(String rarity) {
-        this.rarity = rarity;
-    }
-
     public long getValue() {
         return value;
     }
@@ -67,22 +46,13 @@ public class Item {
         this.value = value;
     }
 
-    public LocalDateTime getLastUpdate() {
-        return lastUpdate;
-    }
-
-    public void setLastUpdate(long lastUpdate) {
-        this.lastUpdate = Utils.epochMilliToDate(lastUpdate);
-    }
-
     public NBTCompound getExtraAttributes() {
         return extraAttributes;
     }
 
     public void setExtraAttributes(String itemBytes) {
-        NBTCompound result = null;
         try {
-            result = NBTReader.readBase64(itemBytes);
+            NBTCompound result = NBTReader.readBase64(itemBytes);
             NBTList list = (NBTList) result.get("i");
 
             this.extraAttributes = (NBTCompound) ((NBTCompound) list.get(0))

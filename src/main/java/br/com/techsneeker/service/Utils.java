@@ -47,7 +47,7 @@ public class Utils {
 
     public static LocalDateTime epochMilliToDate(long value) {
         Instant instant = Instant.ofEpochMilli(value);
-        return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+        return LocalDateTime.ofInstant(instant, ZoneId.of("America/New_York"));
     }
 
 }

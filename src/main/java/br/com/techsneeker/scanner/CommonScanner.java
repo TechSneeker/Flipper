@@ -5,25 +5,30 @@ import br.com.techsneeker.object.Item;
 import br.com.techsneeker.service.ItemController;
 import br.com.techsneeker.service.ProfitCalculator;
 import br.com.techsneeker.service.Utils;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class CommonScanner extends ScannerContract {
 
+    private ScheduledFuture<?> lbSearching;
+    private ScheduledFuture<?> ahWatching;
+    private long cacheLastUpdated = 0L;
+
     public CommonScanner() {
-        this.scheduler = Executors.newScheduledThreadPool(3);
+        super();
         this.lbUpdater();
     }
 
     public CommonScanner(long maximumPrice, long minimumProfit) {
-        this.scheduler = Executors.newScheduledThreadPool(3);
+        super();
         this.maximumPrice = maximumPrice;
         this.minimumProfit = minimumProfit;
         this.lbUpdater();
@@ -36,48 +41,64 @@ public class CommonScanner extends ScannerContract {
 
     @Override
     public void start() {
-        lbSearching = scheduler.scheduleAtFixedRate(this::lbUpdater, 0, 5, TimeUnit.SECONDS);
-        ahSearching = scheduler.scheduleAtFixedRate(this::pooling, 1, 2, TimeUnit.SECONDS);
+        lbSearching = scheduler.scheduleAtFixedRate(this::lbUpdater, 0, 5000, TimeUnit.MILLISECONDS);
+        ahWatching = scheduler.scheduleAtFixedRate(this::pooling, 0, 600, TimeUnit.MILLISECONDS);
     }
 
     @Override
     public void stop() {
-        if (lbSearching != null && ahSearching != null) {
-            lbSearching.cancel(false);
-            ahSearching.cancel(false);
+        if (lbSearching != null && ahWatching != null) {
+            lbSearching.cancel(true);
+            ahWatching.cancel(true);
+            idCleaner.cancel(true);
+
+            if (!scheduler.isShutdown()) {
+                scheduler.shutdown();
+            }
         }
     }
 
     @Override
     protected void pooling() {
-        this.builder(client.getAuction(), amountItemsPerSearch);
+        String jsonValue = client.getAuction();
+        long lastUpdated = client.getLastUpdated(jsonValue);
+
+        if (lastUpdated > cacheLastUpdated) {
+            cacheLastUpdated = lastUpdated;
+            this.builder(jsonValue, amountItemsPerSearch);
+        }
     }
 
     @Override
     protected void builder(String jsonValue, int maxIterations) {
-        long start = System.nanoTime();
-
-        List<Item> profitableItems = new ArrayList<>();
-
         JsonElement jsonElement = JsonParser.parseString(jsonValue);
         JsonObject jsonObject = jsonElement.getAsJsonObject();
         JsonArray jsonArray = jsonObject.getAsJsonArray("auctions");
 
-        int i = 0;
-        for (JsonElement itemElement : jsonArray) {
-            if (i >= maxIterations) {
-                break;
+        List<Item> profitableItems = jsonArray.asList().parallelStream().filter(element -> {
+            JsonObject object = element.getAsJsonObject();
+
+            boolean auctionBin = object.get("bin").getAsBoolean();
+
+            if (!auctionBin) {
+                return false;
             }
 
-            i++;
+            String category = object.get("category").getAsString();
+            String itemName = object.get("item_name").getAsString();
+            String description = object.get("item_lore").getAsString();
 
-            Item item = this.filter(itemElement);
-
-            if (item == null) {
-                continue;
+            if (Filter.isIgnorable(category, itemName, description)) {
+                return false;
             }
 
-            if (!idCached.contains(item.getId())) {
+            Item item = new Item();
+            item.setId(object.get("uuid").getAsString());
+
+            if (!cachedIds.contains(item.getId())) {
+                item.setExtraAttributes(object.get("item_bytes").getAsString());
+                item.setValue(object.get("starting_bid").getAsLong());
+
                 String formattedName = ItemController.getFormattedNameId(item);
                 JsonElement lowestBinElement = lbJson.get(formattedName);
 
@@ -87,68 +108,43 @@ public class CommonScanner extends ScannerContract {
                     long profit = ProfitCalculator.getProfit(itemPrice, lowestBin);
 
                     if (profit >= minimumProfit && itemPrice <= maximumPrice) {
+                        addToCache(item.getId());
                         item.setProfit(profit);
-                        profitableItems.add(item);
+                        return true;
                     }
                 }
             }
-        }
 
-        long end = System.nanoTime();
-        long elapsedTimeMillis = TimeUnit.NANOSECONDS.toMillis(end - start);
-        System.out.println("Time: " + elapsedTimeMillis + "ms");
+            return false;
 
-        if (!profitableItems.isEmpty()) {
-
-            Item mostProfitableItem = null;
-            long profitableValue = 1L;
-
-            for (Item item : profitableItems) {
-                addToCache(item.getId());
-
-                if (item.getProfit() > profitableValue) {
-                    mostProfitableItem = item;
-                    profitableValue = item.getProfit();
-                }
-
-                System.out.println(item.getName() + " - " + item.getValue() + "    Profit: " + item.getProfit() + " /viewauction " + item.getId());
+        }).map(this::buildItemFromElement).sorted((o1, o2) -> {
+            if (o1 == null || o2 == null) {
+                return 0;
             }
 
+            return Long.compare(o2.getProfit(), o1.getProfit());
+        }).collect(Collectors.toList());
+
+        Item mostProfitableItem = profitableItems.isEmpty() ? null : profitableItems.get(0);
+
+        if (mostProfitableItem != null) {
             Utils.sendToClipboard("/viewauction " + mostProfitableItem.getId());
         }
     }
 
-
-    @Override
-    protected Item filter(JsonElement itemElement) {
+    protected Item buildItemFromElement(JsonElement itemElement) {
         JsonObject jsonItem = itemElement.getAsJsonObject();
 
-        String category = jsonItem.get("category").getAsString();
-        String itemName = jsonItem.get("item_name").getAsString();
-
-        if (Filter.isIgnorable(category, itemName)) {
-            return null;
-        }
-
-        boolean bin = jsonItem.get("bin").getAsBoolean();
-        boolean claimed = jsonItem.get("claimed").getAsBoolean();
-
-        if (!bin || claimed) {
-            return null;
-        }
-
         Item item = new Item();
-        item.setName(itemName);
         item.setId(jsonItem.get("uuid").getAsString());
         item.setExtraAttributes(jsonItem.get("item_bytes").getAsString());
         item.setValue(jsonItem.get("starting_bid").getAsLong());
-        item.setLastUpdate(jsonItem.get("last_updated").getAsLong());
 
         return item;
     }
 
     public void addToCache(String id) {
-        idCached.add(id);
+        cachedIds.add(id);
     }
 
 }

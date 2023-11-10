@@ -13,19 +13,25 @@ import com.google.gson.JsonParser;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
-import java.util.concurrent.Executors;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class OnCooldownScanner extends ScannerContract {
 
+    private ScheduledFuture<?> lbSearching;
+    private ScheduledFuture<?> ahWatching;
+
     public OnCooldownScanner() {
-        scheduler = Executors.newScheduledThreadPool(3);
+        super();
         this.lbUpdater();
     }
 
     public OnCooldownScanner(long maximumPrice, long minimumProfit) {
-        scheduler = Executors.newScheduledThreadPool(3);
+        super();
         this.maximumPrice = maximumPrice;
         this.minimumProfit = minimumProfit;
         this.lbUpdater();
@@ -38,15 +44,20 @@ public class OnCooldownScanner extends ScannerContract {
 
     @Override
     public void start() {
-        lbSearching = scheduler.scheduleAtFixedRate(this::lbUpdater, 0, 5, TimeUnit.SECONDS);
-        ahSearching = scheduler.scheduleWithFixedDelay(this::pooling, 1, 2, TimeUnit.SECONDS);
+        lbSearching = scheduler.scheduleAtFixedRate(this::lbUpdater, 0, 2500, TimeUnit.MILLISECONDS);
+        ahWatching = scheduler.scheduleWithFixedDelay(this::pooling, 0, 250, TimeUnit.MILLISECONDS);
     }
 
     @Override
     public void stop() {
-        if (lbSearching != null && ahSearching != null) {
-            lbSearching.cancel(false);
-            ahSearching.cancel(false);
+        if (lbSearching != null && ahWatching != null) {
+            lbSearching.cancel(true);
+            ahWatching.cancel(true);
+            idCleaner.cancel(true);
+
+            if (!scheduler.isShutdown()) {
+                scheduler.shutdown();
+            }
         }
     }
 
@@ -57,30 +68,48 @@ public class OnCooldownScanner extends ScannerContract {
 
     @Override
     protected void builder(String jsonValue, int maxIterations) {
-        long start = System.nanoTime();
-
-        Item profitableItem = null;
-        long profitableValue = 0L;
+        List<Item> profitableItems = new ArrayList<>();
 
         JsonElement jsonElement = JsonParser.parseString(jsonValue);
         JsonObject jsonObject = jsonElement.getAsJsonObject();
         JsonArray jsonArray = jsonObject.getAsJsonArray("auctions");
 
-        int i = 0;
-        for (JsonElement itemElement : jsonArray) {
-            if (i >= maxIterations) {
-                break;
-            }
+        for (JsonElement element : jsonArray) {
+            JsonObject object = element.getAsJsonObject();
 
-            i++;
+            boolean auctionBin = object.get("bin").getAsBoolean();
 
-            Item item = this.filter(itemElement);
-
-            if (item == null) {
+            if (!auctionBin) {
                 continue;
             }
 
-            if (!idCached.contains(item.getId())) {
+            String category = object.get("category").getAsString();
+            String itemName = object.get("item_name").getAsString();
+            String description = object.get("item_lore").getAsString();
+
+            if (Filter.isIgnorable(category, itemName, description)) {
+                continue;
+            }
+
+            long lastUpdated = object.get("last_updated").getAsLong();
+
+            LocalDateTime now = LocalDateTime.now(ZoneId.of("America/New_York"));
+            LocalDateTime auctionTime = Utils.epochMilliToDate(lastUpdated);
+
+            Duration duration = Duration.between(auctionTime, now);
+
+            if (!(duration.getSeconds() <= 20)) {
+                continue;
+            }
+
+            Item item = new Item();
+            item.setId(object.get("uuid").getAsString());
+
+            if (!cachedIds.contains(item.getId())) {
+                item.setExtraAttributes(object.get("item_bytes").getAsString());
+                item.setValue(object.get("starting_bid").getAsLong());
+                item.setName(object.get("item_name").getAsString());
+
                 String formattedName = ItemController.getFormattedNameId(item);
                 JsonElement lowestBinElement = lbJson.get(formattedName);
 
@@ -90,66 +119,33 @@ public class OnCooldownScanner extends ScannerContract {
                     long profit = ProfitCalculator.getProfit(itemPrice, lowestBin);
 
                     if (profit >= minimumProfit && itemPrice <= maximumPrice) {
-                        profitableValue = profit;
-                        profitableItem = item;
-                        break;
+                        addToCache(item.getId());
+                        item.setProfit(profit);
+                        profitableItems.add(item);
                     }
                 }
             }
+
         }
 
-        long end = System.nanoTime();
-        long elapsedTimeMillis = TimeUnit.NANOSECONDS.toMillis(end - start);
-        System.out.println("Time: " + elapsedTimeMillis + "ms");
+        profitableItems.sort((o1, o2) -> {
+            if (o1 == null || o2 == null) {
+                return 0;
+            }
 
-        if (profitableItem != null) {
-            addToCache(profitableItem.getId());
-            Utils.sendToClipboard("/viewauction " + profitableItem.getId());
-            System.out.println(profitableItem.getName() + " - " + profitableItem.getValue() + "    Profit: " + profitableValue + "/viewauction " + profitableItem.getId());
+            return Long.compare(o2.getProfit(), o1.getProfit());
+        });
+
+        Item mostProfitableItem = profitableItems.isEmpty() ? null : profitableItems.get(0);
+
+        if (mostProfitableItem != null) {
+            Utils.sendToClipboard("/viewauction " + mostProfitableItem.getId());
+            System.out.println(mostProfitableItem.getName() + " - " + mostProfitableItem.getValue() + " Profit: " + mostProfitableItem.getProfit() + " /viewauction " + mostProfitableItem.getId());
         }
-    }
-
-    @Override
-    protected Item filter(JsonElement itemElement) {
-        JsonObject jsonItem = itemElement.getAsJsonObject();
-
-        String category = jsonItem.get("category").getAsString();
-        String itemName = jsonItem.get("item_name").getAsString();
-
-        if (Filter.isIgnorable(category, itemName)) {
-            return null;
-        }
-
-        long lastUpdated = jsonItem.get("last_updated").getAsLong();
-
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime auctionTime = Utils.epochMilliToDate(lastUpdated);
-
-        Duration duration = Duration.between(auctionTime, now);
-
-        if (!(duration.getSeconds() <= 20)) {
-            return null;
-        }
-
-        boolean bin = jsonItem.get("bin").getAsBoolean();
-        boolean claimed = jsonItem.get("claimed").getAsBoolean();
-
-        if (!bin || claimed) {
-            return null;
-        }
-
-        Item item = new Item();
-        item.setName(itemName);
-        item.setLastUpdate(lastUpdated);
-        item.setId(jsonItem.get("uuid").getAsString());
-        item.setExtraAttributes(jsonItem.get("item_bytes").getAsString());
-        item.setValue(jsonItem.get("starting_bid").getAsLong());
-
-        return item;
     }
 
     private void addToCache(String id) {
-        idCached.add(id);
+        cachedIds.add(id);
     }
 
 }

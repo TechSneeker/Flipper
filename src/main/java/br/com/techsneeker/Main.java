@@ -24,6 +24,7 @@ public class Main {
             OnCooldownScanner onCooldownScanner = new OnCooldownScanner(maximumPrice, minimumProfit);
             onCooldownScanner.configAmount(100).start();
         }
+
     }
 
 }
