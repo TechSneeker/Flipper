@@ -31,8 +31,8 @@ public class Config {
     }
 
     private static void collectScanner() {
-        System.out.println("[1] xxxxx");
-        System.out.println("[2] xxxxx\n");
+        System.out.println("[1] COMMON");
+        System.out.println("[2] BED\n");
         System.out.print("Select the flip mode: ");
         long flipMode = scanner.nextLong();
 
